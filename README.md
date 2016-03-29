@@ -2,10 +2,13 @@
 
 These scripts do analysis of input data and run cross-validation tests using the Universal Recommender. The analysis show information about usage data, and the CV tests use a technique called MAP@k to rest the predictiveness of the many types of *indicators* used in a deployment of the UR. The tools run in 2 phases:
 
- 1. Split the data into train and test splits, calculate usage stats
- 2. Run several forms of MAP@k predictiveness tests on the splits creating reports
+ 1. **Split**: Split the data into train and test splits, calculate usage stats. This toolset performs this phase.
+ 2. **Train and Deploy**: Import the "train" dataset into the EventServer, train, and deploy the model. This can also be scripted but is **not** part of these scripts.
+ 3. **Analyze**: Run several forms of MAP@k predictiveness tests on the splits creating reports. This is performed by this toolset on the deployed model from #2
  
- Since #1 can take a significant amount of time, it is advised to run it once and run #2 with different configs, if it is needed, this will create a completely reproducable split so you can safely compare results from any run of #2.
+ Since #1 can take a significant amount of time, it is advised to run it once, then train and deploy once, and run #3 with different configs if needed. There is no need to retrain in most cases. This will create a completely reproducible split so you can safely compare results from any run of #3.
+ 
+ If any change is made to the engine.json, repeat #1-3
  
 #Setup
 
