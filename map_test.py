@@ -1,4 +1,6 @@
-#!/usr/local/bin/python
+#!/usr/bin/env python
+
+#####!/usr/local/bin/python
 
 import logging
 
