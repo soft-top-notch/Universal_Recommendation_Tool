@@ -13,7 +13,9 @@
   },
 
   "reporting": {
-    "file": "./report.xlsx"
+    "file": "./report.xlsx",
+    "csv_dir": "./report",
+    "use_uuid": true
   },
 
   "testing": {

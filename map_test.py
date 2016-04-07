@@ -17,8 +17,10 @@ import numpy as np
 import ml_metrics as metrics
 from tqdm import tqdm
 
-from excel import get_workbook, fill_table_worksheet, create_table, dump_config
+from report import CSVReport, ExcelReport
 from config import init_config
+
+from uuid import uuid4
 
 logging.basicConfig(level=logging.INFO,
     format='%(asctime)s %(levelname)s %(message)s')
@@ -83,10 +85,18 @@ def mk_intersection_matrix(by_rows, columns_for_matrix,
 
 @click.command()
 @click.option('--intersections', is_flag=True)
-def split(intersections):
+@click.option('--csv_report', is_flag=True)
+def split(intersections, csv_report):
     logging.info('Splitting started')
 
-    wb = get_workbook(cfg.reporting.file)
+    if csv_report:
+        if cfg.reporting.use_uuid:
+            uuid = uuid4()
+            reporter = CSVReport(cfg.reporting.csv_dir, uuid)
+        else:
+            reporter = CSVReport(cfg.reporting.csv_dir, None)
+    else:
+        reporter = ExcelReport(cfg.reporting.file)
 
     logging.info('Spark initialization')
     sc = SparkContext(cfg.spark.master, 'map_test: split')
@@ -229,8 +239,8 @@ def split(intersections):
     info_df.insert(5, 'events per item', info_df.ix[:, 1] / info_df.ix[:, 3])
 
     logging.info('Create event stat worksheet')
-    fill_table_worksheet(
-        wb.create_sheet('Events stat'),
+    reporter.start_new_sheet('Events stat')
+    reporter.report(
         ['event', 'event count', 'unique users', 'unique items',
          'events per user', 'events per item',
          'event count train', 'event count test',
@@ -239,13 +249,14 @@ def split(intersections):
         [column.tolist() for _, column in info_df.iteritems()],
         selected_rows=[next(info_df.iteritems())[1].tolist().index(cfg.testing.primary_event)],
         cfg=cfg)
+    reporter.finish_sheet()
 
     if intersections:
         logging.info('Start intersections calculation')
 
-        ws_intersections = wb.create_sheet(title='Intersections')
-        columns_for_matrix = cfg.testing.events
+        reporter.start_new_sheet('Intersections')
 
+        columns_for_matrix = cfg.testing.events
         logging.info('Process train / train user intersection')
         train_train_users = (
             train_df
@@ -258,8 +269,7 @@ def split(intersections):
             .collect())
 
         trtru = mk_intersection_matrix(train_train_users, columns_for_matrix)
-        create_table(
-            ws_intersections,
+        reporter.report(
             [''] + list(trtru.columns.values),
             [trtru.index.tolist()] + [column for _, column in trtru.iteritems()],
             title='Train / train user intersection')
@@ -277,8 +287,7 @@ def split(intersections):
 
         trtsu = mk_intersection_matrix(train_test_users, columns_for_matrix,
                                        horizontal_suffix=" train", vertical_suffix=" test")
-        create_table(
-            ws_intersections,
+        reporter.report(
             [''] + list(trtsu.columns.values),
             [trtsu.index.tolist()] + [column for _, column in trtsu.iteritems()],
             title='Train / test user intersection')
@@ -295,8 +304,7 @@ def split(intersections):
             .collect())
 
         trtri = mk_intersection_matrix(train_train_items, columns_for_matrix)
-        create_table(
-            ws_intersections,
+        reporter.report(
             [''] + list(trtri.columns.values),
             [trtri.index.tolist()] + [column for _, column in trtri.iteritems()],
             title='Train / train item intersection'
@@ -315,16 +323,15 @@ def split(intersections):
 
         trtsi = mk_intersection_matrix(train_test_items, columns_for_matrix,
                                        horizontal_suffix=" train", vertical_suffix=" test")
-        create_table(
-            ws_intersections,
+        reporter.report(
             [''] + list(trtsi.columns.values),
             [trtsi.index.tolist()] + [column for _, column in trtsi.iteritems()],
             title='Train / test item intersection'
         )
 
-        dump_config(ws_intersections, cfg)
+        reporter.report_config(cfg)
 
-    wb.save(cfg.reporting.file)
+    reporter.finish_document()
     logging.info('Splitting finished successfully')
 
 
@@ -439,6 +446,7 @@ def get_nonzero(r_data):
 
 
 @click.command()
+@click.option('--csv_report', is_flag=True)
 @click.option('--all', is_flag=True)
 @click.option('--dummy_test', is_flag=True)
 @click.option('--separate_test', is_flag=True)
@@ -446,7 +454,8 @@ def get_nonzero(r_data):
 @click.option('--primary_pairs_test', is_flag=True)
 @click.option('--custom_combos_test', is_flag=True)
 @click.option('--non_zero_users_from_file', is_flag=True)
-def test(all,
+def test(csv_report,
+         all,
          dummy_test,
          separate_test,
          all_but_test,
@@ -455,7 +464,15 @@ def test(all,
          non_zero_users_from_file):
 
     logging.info('Testing started')
-    wb = get_workbook(cfg.reporting.file)
+
+    if csv_report:
+        if cfg.reporting.use_uuid:
+            uuid = uuid4()
+            reporter = CSVReport(cfg.reporting.csv_dir, uuid)
+        else:
+            reporter = CSVReport(cfg.reporting.csv_dir, None)
+    else:
+        reporter = ExcelReport(cfg.reporting.file)
 
     logging.info('Spark context initialization')
     sc = SparkContext(cfg.spark.master, 'map_test: test')
@@ -492,12 +509,13 @@ def test(all,
         dummy_top_res = run_map_test_dummy(test_data, items=elements, probs=probs,
                                            uniform=True, top=True, K=cfg.testing.map_k)
 
-        fill_table_worksheet(
-            wb.create_sheet('Dummy MAP benchmark'),
+        reporter.start_new_sheet('Dummy MAP benchmark')
+        reporter.report(
             ['', 'Random uniform', 'Random sampled from train', 'Top - N'],
             [[('MAP @ %d' % i) for i in range(1, len(dummy_res)+1)]] + [dummy_uniform_res, dummy_res, dummy_top_res],
             cfg=cfg
         )
+        reporter.finish_sheet()
 
         logging.info('Process top 20 dummy test')
         scores = []
@@ -505,24 +523,25 @@ def test(all,
             scores.append(run_map_test_dummy(test_data, items=elements[i:], uniform=True,
                                              top=True, K=1, no_progress=True)[0])
 
-        ws_top_20 = wb.create_sheet('Top-20 perfomance')
-        fill_table_worksheet(
-            ws_top_20,
+        reporter.start_new_sheet('Top-20 perfomance')
+        reporter.report(
             ['Rank', 'MAP@1'],
             [list(range(1, 21)), scores],
             bold_first_column=False,
             cfg=cfg
         )
+        reporter.finish_sheet()
 
-    logging.info('Non zero users')
-    if non_zero_users_from_file:
-        with open(cfg.testing.non_zero_users_file) as input:
-            non_zero_users = set(input.read().split(','))
-    else:
-        _, r_data, _ = run_map_test(test_data, [cfg.testing.primary_event], test=False)
-        non_zero_users = get_nonzero(r_data)
-        with open(cfg.testing.non_zero_users_file, 'w') as output:
-            output.write(','.join(non_zero_users))
+    if all or separate_test or all_but_test or primary_pairs_test or custom_combos_test:
+        logging.info('Non zero users')
+        if non_zero_users_from_file:
+            with open(cfg.testing.non_zero_users_file) as input:
+                non_zero_users = set(input.read().split(','))
+        else:
+            _, r_data, _ = run_map_test(test_data, [cfg.testing.primary_event], test=False)
+            non_zero_users = get_nonzero(r_data)
+            with open(cfg.testing.non_zero_users_file, 'w') as output:
+                output.write(','.join(non_zero_users))
 
     if all or separate_test:
         logging.info('Process "map separate events" test')
@@ -533,13 +552,14 @@ def test(all,
 
         first_column = [('MAP @ %d' % i) for i in range(1, len(columns[0]))] + ['non-zero users']
 
-        fill_table_worksheet(
-            wb.create_sheet('MAP separate events'),
+        reporter.start_new_sheet('MAP separate events')
+        reporter.report(
             ['event'] + cfg.testing.events,
             [first_column] + columns,
             selected_columns=[cfg.testing.events.index(cfg.testing.primary_event) + 1],
             cfg=cfg
         )
+        reporter.finish_sheet()
 
     if all or all_but_test:
         logging.info('Process "map all but..." test')
@@ -555,13 +575,14 @@ def test(all,
         all_scores.append(len(non_zero_users))
 
         first_column = [('MAP @ %d' % i) for i in range(1, len(all_scores))] + ['non-zero users']
-        fill_table_worksheet(
-            wb.create_sheet('MAP all but...'),
+        reporter.start_new_sheet('MAP all but...')
+        reporter.report(
             ['event'] + cfg.testing.events + ['All'],
             [first_column] + events_scores + [all_scores],
             selected_columns=[cfg.testing.events.index(cfg.testing.primary_event) + 1],
             cfg=cfg
         )
+        reporter.finish_sheet()
 
     if all or primary_pairs_test:
         logging.info('Process "map pairs with primary" test')
@@ -573,12 +594,14 @@ def test(all,
             columns.append(r_scores + [len(non_zero_users)])
 
         first_column = [('MAP @ %d' % i) for i in range(1, len(columns[0]))] + ['non-zero users']
-        fill_table_worksheet(
-            wb.create_sheet('MAP pairs with primary'),
+
+        reporter.start_new_sheet('MAP pairs with primary')
+        reporter.report(
             ['event'] + events_without_primary,
             [first_column] + columns,
             cfg=cfg
         )
+        reporter.finish_sheet()
 
     if all or custom_combos_test:
         logging.info('Process "custom combos" test')
@@ -601,14 +624,16 @@ def test(all,
             columns.append(r_scores + [len(non_zero_users)])
 
         first_column = [('MAP @ %d' % i) for i in range(1, len(columns[0]))] + ['non-zero users']
-        fill_table_worksheet(
-            wb.create_sheet('Custom combos'),
+
+        reporter.start_new_sheet('Custom combos')
+        reporter.report(
             ['event'] + [str([s.encode('utf-8') for s in group]) for group in cfg.testing.custom_combos.event_groups],
             [first_column] + columns,
             cfg=cfg
         )
+        reporter.finish_sheet()
 
-    wb.save(cfg.reporting.file)
+    reporter.finish_document()
     logging.info('Testing finished successfully')
 
 # root group
