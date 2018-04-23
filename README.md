@@ -1,4 +1,19 @@
-#Analysis Tools
+# Universal Recommender Analysis Tool V2
+
+The primary change to V2 of the tool is to simplify by integrating all external processes so one line will execute all steps.
+
+The steps to execute all workflow are:
+
+ 1. **Verify the PIO EventServer is running** `pio status` will do this.
+ 2. **Export Data** We assume that the data exists in the EventServer or in HDFS. Export the data to the location specified in the `config.json` file. Since it is often desirable to use an existing data split there should be a CLI option to skip splitting to use the paths in the config as they exist.
+ 3. **Split** the data as in Alexey's #1 (optional: see #2)
+ 4. **Train and Deploy** To do this 3 PIO workflow steps need to be taken. These must be executed inside the directory of the UR version we are testing.
+    1. **`pio build`** This will create the Universal Recommender code and register the algorithm parameters
+    2. **`pio train`** This will create a model with the UR from the `engine.json` parameters. There will be new parameters to pass in to `pio train` that are system dependent, like how much memory to use on each Spark Driver and Executor as well as others. Not sure how or where to set these. They will not change while using one cluster so perhaps in the `config.json`.
+    3. **`pio deploy`** This will create a running PIO PredictionServer that responds to UR queries
+ 5. **Analyze** Same as Alexey's #3   
+
+# Alexey's Analysis Tools
 
 These scripts do analysis of input data and run cross-validation tests using the Universal Recommender. The analysis show information about usage data, and the CV tests use a technique called MAP@k to rest the predictiveness of the many types of *indicators* used in a deployment of the UR. The tools run in 2 phases:
 
@@ -12,7 +27,7 @@ Since #1 can take a significant amount of time, it is advised to run it once, th
 
  If any change is made to the engine.json, repeat #1-3
 
-#Setup
+# Setup
 
 Install Spark, PredictionIO v0.9.6 or greater, and the Universal Recommender v0.3.0 or greater. Make sure `pio status` completes with no errors and the integration-test for the UR runs correctly.
 
@@ -42,7 +57,7 @@ Analysis script should be run from UR (Universal recommender) folder. It uses tw
 - `engine.json` (configuration of UR, this file is used to take event list and primary event)
 - `config.json` (all other configuration including engine.json path if necessary)
 
-##Configuration options
+## Configuration options
 
 config.json has the following structure:
 
@@ -103,7 +118,7 @@ config.json has the following structure:
 - __spark__ - Apache Spark configuration
 	- __master__ - for now only master URL is configurable
 
-##Split the Data
+## Split the Data
 
 Get data from the EventServer with:
 
@@ -120,11 +135,11 @@ Additional options are available:
 - `--csv_report` - put report to csv file not excel
 - `--intersections` - calculate train / test event intersection data (**Advanced**)
 
-##Train a Model
+## Train a Model
 
 The above command will create a test and training split in the location specified in config.json. Now you must import, setup engine.json, train and deploy the "train" model so the rest of the MAP@k tests will be able to query the model.
 
-##Test and Analysis
+## Test and Analysis
 
 To run tests
 ```
@@ -141,11 +156,11 @@ Additional options are available and may be used to run not all test:
 - `--custom_combos_test` - run custom combo tests as configured in config.json
 - `--non_zero_users_from_file` - use list of users from file prepared on previous script run to save time
 
-##Generated Report
+## Generated Report
 
 
 
-###Old ipython analysis script
+### Old ipython analysis script
 This is not recommended old approach to run ipython notebook.
 ```
 IPYTHON_OPTS="notebook" /usr/local/spark/bin/pyspark --master spark://spark-url:7077
