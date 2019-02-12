@@ -5,37 +5,23 @@ The primary change to V2 of the tool is to simplify by integrating all external 
 The steps to execute all workflow are:
 
  1. **Verify the PIO EventServer is running** `pio status` will do this.
- 2. **Export Data** We assume that the data exists in the EventServer or in HDFS. Export the data to the location specified in the `config.json` file. Since it is often desirable to use an existing data split there should be a CLI option to skip splitting to use the paths in the config as they exist.
- 3. **Split** the data as in Alexey's #1 (optional: see #2)
+ 2. **Export Data** We assume that the data exists in the EventServer or in HDFS. Export the data to the location specified in the `config.json` file.  
+ 3. **Split** the data using the `map_test split` directive. It is often desirable to use an existing data split so the split step can be omitted.
  4. **Train and Deploy** To do this 3 PIO workflow steps need to be taken. These must be executed inside the directory of the UR version we are testing.
     1. **`pio build`** This will create the Universal Recommender code and register the algorithm parameters
-    2. **`pio train`** This will create a model with the UR from the `engine.json` parameters. There will be new parameters to pass in to `pio train` that are system dependent, like how much memory to use on each Spark Driver and Executor as well as others. Not sure how or where to set these. They will not change while using one cluster so perhaps in the `config.json`.
-    3. **`pio deploy`** This will create a running PIO PredictionServer that responds to UR queries
+    2. **`pio train`** This will create a model with the UR from the `engine.json` parameters. There are parameters in engine.json that are passed to Spark in the training process that are system and data dependent so make sure train completes correctly before moving on. Using these tools usually happens after the bootstrap dataset has be3en successfully trained so the split is made on the dataset.
+    3. **`pio deploy`** This will create a running PIO PredictionServer that responds to UR queries based on the training split of the dataset.
  5. **Analyze** Same as Alexey's #3   
-
-# Alexey's Analysis Tools
-
-These scripts do analysis of input data and run cross-validation tests using the Universal Recommender. The analysis show information about usage data, and the CV tests use a technique called MAP@k to rest the predictiveness of the many types of *indicators* used in a deployment of the UR. The tools run in 2 phases:
-
- 1. **Split**: Split the data into train and test splits, calculate usage stats.
- 2. **Train and Deploy**: Import the "train" dataset into the EventServer, train, and deploy the model. This can also be scripted but is **not** part of these scripts.
- 3. **Analyze**: Run several forms of MAP@k predictiveness tests on the splits, collect stats, and create a report for Excel.
-
-**Note:** This toolset does #1 and #3 but does not do #2.
-
-Since #1 can take a significant amount of time, it is advised to run it once, then train and deploy once, and run #3 with different configs if needed. There is no need to retrain in most cases. This will create a completely reproducible split so you can safely compare results from any run of #3.
-
- If any change is made to the engine.json, repeat #1-3
 
 # Setup
 
-Install Spark, PredictionIO v0.9.6 or greater, and the Universal Recommender v0.3.0 or greater. Make sure `pio status` completes with no errors and the integration-test for the UR runs correctly.
+Install Spark, PredictionIO v0.11.0 or greater, and the Universal Recommender v0.7.3 or greater. Make sure `pio status` completes with no errors and the integration-test for the UR runs correctly.
 
  1. Install Python and check the version
 
  	`python --v`
 
- 	if the version is less than 2.7.9 upgrade to the most recent stable version of python using systems package management tools like `apt-get` for Ubuntu linux or `brew` for the Mac.
+ 	if the version is less than 2.7.9 upgrade to the most recent stable version of python using systems package management tools like `apt-get` for Ubuntu linux or `brew` for the macOS. This tool has not been tested with Python 3 so stick with Python 2.7
 
  2. Install Python libraries using the Python package manager found [here](https://pip.pypa.io/en/stable/installing/)
 
@@ -43,7 +29,7 @@ Install Spark, PredictionIO v0.9.6 or greater, and the Universal Recommender v0.
  	sudo pip install numpy scipy pandas ml_metrics predictionio tqdm click openpyxl
  	```
 
- 3. Setup Spark and Pyspark paths in `.bashrc` (linux) or `.bash_profile` Mac.
+ 3. Setup Spark and Pyspark paths in `.bashrc` (linux) or `.bash_profile` macOS.
 
  	```
  	export SPARK_HOME=/path/to/spark
@@ -158,7 +144,7 @@ Additional options are available and may be used to run not all test:
 
 ## Generated Report
 
-
+Todo
 
 ### Old ipython analysis script
 This is not recommended old approach to run ipython notebook.
